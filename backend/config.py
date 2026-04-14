@@ -28,7 +28,10 @@ _load_env_file(_ROOT_ENV)
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./backend/sql_app.db")
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "sqlite:////tmp/fit-flow.db" if os.getenv("VERCEL") == "1" else "sqlite:///./backend/sql_app.db",
+    )
 
     CORS_ALLOW_ORIGIN_REGEX: str = os.getenv("CORS_ALLOW_ORIGIN_REGEX", r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$")
     CORS_ALLOW_CREDENTIALS: bool = os.getenv("CORS_ALLOW_CREDENTIALS", "0") == "1"

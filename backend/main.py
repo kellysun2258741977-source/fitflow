@@ -20,7 +20,10 @@ from .config import settings
 from .image_recognition import recognize_dish, recognize_advanced_general
 
 
-models.Base.metadata.create_all(bind=engine)
+try:
+    models.Base.metadata.create_all(bind=engine)
+except Exception:
+    pass
 
 # Dependency
 def get_db():
