@@ -1,0 +1,115 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        description: Deploy target
+        required: true
+        options:
+          - staging
+          - production
+
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  test_build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend install
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Frontend test
+        working-directory: frontend
+        run: npm run test
+
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Backend install
+        run: python -m pip install -r requirements.txt
+
+      - name: Backend compile
+        run: python -m py_compile backend/main.py backend/crud.py backend/models.py backend/schemas.py backend/image_recognition.py backend/config.py
+
+  deploy:
+    needs: test_build
+    runs-on: ubuntu-latest
+    environment: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment) || (github.ref_name == 'staging' && 'staging') || 'production' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve target
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "env=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          else
+            if [ "${{ github.ref_name }}" = "staging" ]; then
+              echo "env=staging" >> $GITHUB_OUTPUT
+            else
+              echo "env=production" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Start ssh-agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy via SSH
+        uses: nick-invision/retry@v3
+        with:
+          timeout_minutes: 30
+          max_attempts: 3
+          command: |
+            set -euo pipefail
+            KEY_B64=$(printf '%s' "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -w 0)
+            ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+              "APP_NAME='${{ vars.APP_NAME }}' DEPLOY_ENV='${{ steps.target.outputs.env }}' APP_DIR='${{ vars.APP_DIR }}' SYSTEMD_SERVICE='${{ vars.SYSTEMD_SERVICE }}' HEALTHCHECK_URL='${{ vars.HEALTHCHECK_URL }}' GITHUB_REPOSITORY='${{ github.repository }}' GITHUB_SHA='${{ github.sha }}' GIT_SSH_PRIVATE_KEY_B64='${KEY_B64}' bash -s" \
+              < ./deploy.sh
+
+      - name: Notify
+        if: always()
+        env:
+          WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          STATUS="${{ job.status }}"
+          MSG="${{ github.repository }} ${{ github.sha }} -> ${{ steps.target.outputs.env }}: ${STATUS}"
+          echo "${MSG}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${WEBHOOK_URL}" ]; then
+            curl -fsS -X POST -H 'Content-Type: application/json' -d "{\"text\":\"${MSG}\"}" "${WEBHOOK_URL}" >/dev/null || true
+          fi
+

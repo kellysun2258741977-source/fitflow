@@ -1,0 +1,15 @@
+[Unit]
+Description=fit flow backend
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/fit-flow/current/backend
+EnvironmentFile=-/opt/fit-flow/shared/backend.env
+ExecStart=/opt/fit-flow/shared/venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+

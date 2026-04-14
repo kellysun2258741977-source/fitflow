@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-500: #0055FF;
+  --color-primary-600: #0044CC;
+  --color-dark-bg: #050505;
+  --color-dark-card: #111111;
+  --color-dark-border: #222222;
+
+  --animate-blob: blob 10s infinite alternate;
+
+  @keyframes blob {
+    0% {
+      transform: translate3d(0px, 0px, 0) scale(1);
+    }
+
+    33% {
+      transform: translate3d(30px, -50px, 0) scale(1.1);
+    }
+
+    66% {
+      transform: translate3d(-20px, 20px, 0) scale(0.9);
+    }
+
+    100% {
+      transform: translate3d(0px, 0px, 0) scale(1);
+    }
+  }
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 26%),
+    radial-gradient(circle at top right, rgba(168, 85, 247, 0.06), transparent 24%),
+    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  color: #0f172a;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(59, 130, 246, 0.18);
+}
